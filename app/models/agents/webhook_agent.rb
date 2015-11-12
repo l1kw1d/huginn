@@ -1,5 +1,7 @@
 module Agents
   class WebhookAgent < Agent
+    include WebRequestConcern
+
     cannot_be_scheduled!
     cannot_receive_events!
 
@@ -24,6 +26,7 @@ module Agents
           For example, "post,get" will enable POST and GET requests. Defaults
           to "post".
         * `response` - The response message to the request. Defaults to 'Event Created'.
+        * `recaptcha_secret` - Setting this to a reCAPTCHA "secret" key makes your agent verify incoming requests with reCAPTCHA.  Don't forget to embed a reCAPTCHA snippet including your "site" key in the originating form(s).
       MD
     end
 
@@ -46,9 +49,29 @@ module Agents
       secret = params.delete('secret')
       return ["Not Authorized", 401] unless secret == interpolated['secret']
 
-      #check the verbs
+      # check the verbs
       verbs = (interpolated['verbs'] || 'post').split(/,/).map { |x| x.strip.downcase }.select { |x| x.present? }
       return ["Please use #{verbs.join('/').upcase} requests only", 401] unless verbs.include?(method)
+
+      # check the reCAPTCHA response if required
+      if recaptcha_secret = interpolated['recaptcha_secret'].presence
+        recaptcha_response = params['g-recaptcha-response'] or
+          return ["Not Authorized", 401]
+
+        begin
+          response = faraday.post('https://www.google.com/recaptcha/api/siteverify', {
+                                    secret: recaptcha_secret,
+                                    response: recaptcha_response,
+                                    # remoteip: request.env['REMOTE_ADDR'],
+                                  })
+
+          JSON.parse(response.body)['success'] or
+            return ["Not Authorized", 401]
+        rescue => e
+          error "Verification failed: #{e.message}"
+          return ["Not Authorized", 401]
+        end
+      end
 
       [payload_for(params)].flatten.each do |payload|
         create_event(payload: payload)
