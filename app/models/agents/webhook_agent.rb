@@ -55,7 +55,7 @@ module Agents
 
       # check the reCAPTCHA response if required
       if recaptcha_secret = interpolated['recaptcha_secret'].presence
-        recaptcha_response = params['g-recaptcha-response'] or
+        recaptcha_response = params.delete('g-recaptcha-response') or
           return ["Not Authorized", 401]
 
         begin

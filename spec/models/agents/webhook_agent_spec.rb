@@ -277,6 +277,7 @@ describe Agents::WebhookAgent do
         end
 
         it "should accept a request if recaptcha_secret is set and g-recaptcha-response given is verified" do
+          agent.options['payload_path'] = '.'
           agent.options['recaptcha_secret'] = 'supersupersecret'
 
           checked = false
@@ -288,10 +289,11 @@ describe Agents::WebhookAgent do
           }
 
           expect {
-            out = agent.receive_web_request({ 'secret' => 'foobar', 'some_key' => payload, 'g-recaptcha-response' => 'somevalue' }, "post", "text/html")
+            out = agent.receive_web_request(payload.merge({ 'secret' => 'foobar', 'g-recaptcha-response' => 'somevalue' }), "post", "text/html")
           }.to change { checked }
 
           expect(out).to eq(["Event Created", 201])
+          expect(Event.last.payload).to eq(payload)
         end
       end
 
